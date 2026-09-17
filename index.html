@@ -63,7 +63,7 @@
   <h2>Bước 1 — Nhập/cập nhật dữ liệu (khi có file mới của xí nghiệp bạn)</h2>
   <div class="file-row">
     <div>
-      <label>File dữ liệu Lô/Thửa (…MD_KQ…xlsx, cần sheet "datalo" và "SB Cắt bắp")</label>
+      <label>File dữ liệu Lô/Thửa (…MD_KQ…xlsx, cần sheet "datalo")</label>
       <div class="file-picker">
         <input type="file" id="fileMD" accept=".xlsx,.xls">
         <span class="file-name" id="fileMD-name"></span>
@@ -117,7 +117,17 @@
   </div>
 
   <div id="loInfo"></div>
-  <div id="catBapInfo" class="sub hidden"></div>
+
+  <div class="row">
+    <div class="field">
+      <label>Số lượng chích búp trong tháng</label>
+      <input type="number" id="inputSoBup" min="0" value="0">
+    </div>
+    <div class="field">
+      <label>Số lượng buồng (phun thuốc/bao buồng) trong tháng</label>
+      <input type="number" id="inputSoBuong" min="0" value="0">
+    </div>
+  </div>
 
   <button id="btnCalc" disabled>Tính định mức vật tư</button>
   <div id="warnBox"></div>
@@ -137,7 +147,7 @@
     <tbody></tbody>
   </table>
   <div class="note">
-    Ghi chú: (1) Số búp/buồng lấy tự động từ sheet "SB Cắt bắp" trong file MD, theo đúng Lô/Thửa và tháng đang tính (số liệu kế hoạch SXKD) — không phải nhập tay.
+    Ghi chú: (1) Số lượng chích búp/buồng do bạn tự nhập cho đúng tháng đang tính (không lấy tự động từ file).
     (2) Số cây/Diện tích lấy cố định từ sheet "datalo" — nếu lô có biến động (trồng dặm, huỷ...) trong tháng, số liệu có thể lệch nhẹ.
   </div>
 </div>
@@ -150,7 +160,6 @@ const BASE_YEAR = 2022; // idTN=1 <=> Tháng 1/2022 (xác nhận từ sheet idTN
 let datalo = [];         // danh sách lô/thửa đã parse
 let dinhMucSections = []; // danh sách mục định mức đã parse
 let selectedLo = null;
-let catBapMap = {};      // catBapMap[ID lô][idTN] = số buồng cắt bắp kế hoạch tháng đó (sheet "SB Cắt bắp")
 let localSources = (typeof DASHBOARD_DATA_SOURCES !== 'undefined') ? DASHBOARD_DATA_SOURCES.slice() : [];
 let activeSourceLabel = null;
 let freshlyUploaded = false; // true khi vừa nhập file mới (khác với bấm chọn nguồn đã lưu sẵn)
@@ -176,7 +185,6 @@ function renderSourcePills(){
 
 function useSource(src){
   datalo = src.datalo || [];
-  catBapMap = src.catBapMap || {};
   dinhMucSections = src.dinhMucSections || [];
   activeSourceLabel = src.label;
   document.getElementById('sourceActive').textContent =
@@ -223,7 +231,7 @@ document.getElementById('fileMD').addEventListener('change', e => {
   readWorkbook(file, (err, wb) => {
     if (err){ setStatus('statusMD', 'Lỗi đọc file: ' + err.message, false); return; }
     parseMDWorkbook(wb);
-  }, ['datalo', 'SB Cắt bắp']);
+  }, ['datalo']);
 });
 
 function parseMDWorkbook(wb){
@@ -264,43 +272,9 @@ function parseMDWorkbook(wb){
         tinhTrang: String(r[idx.tinhTrang]||'')
       });
     }
-    parseCatBap(wb);
     setStatus('statusMD', `Đã nạp ${datalo.length} lô/thửa.`, true);
     populateXNList();
     tryEnable();
-}
-
-// Sheet "SB Cắt bắp": số buồng cắt bắp kế hoạch theo Lô/Thửa + idTN (dùng chung cho Chích búp / Phun thuốc buồng / Bao buồng,
-// vì đây chính là mốc búp chuyển thành buồng trong mô hình định mức gốc).
-function parseCatBap(wb){
-  catBapMap = {};
-  const ws = wb.Sheets['SB Cắt bắp'];
-  if (!ws) return; // không bắt buộc phải có, chỉ ảnh hưởng các mục chích búp/phun/bao buồng
-  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-  let headerRowIdx = -1;
-  for (let i=0;i<rows.length;i++){
-    if (String(rows[i][0]||'').trim() === 'Xí nghiệp' && String(rows[i][5]||'').trim() === 'ID'){
-      headerRowIdx = i; break;
-    }
-  }
-  if (headerRowIdx === -1) return;
-  const header = rows[headerRowIdx];
-  const idTNCols = [];
-  for (let c=6;c<header.length;c++){
-    const n = Number(header[c]);
-    if (!isNaN(n) && header[c]!=='') idTNCols.push({idx:c, idTN:n});
-  }
-  for (let i=headerRowIdx+1;i<rows.length;i++){
-    const r = rows[i];
-    const id = String(r[5]||'').trim();
-    if (!id) continue; // dòng trống/dòng nhóm tổng theo Xí nghiệp-Nông trường
-    const byIdTN = {};
-    idTNCols.forEach(c => {
-      const v = Number(r[c.idx]);
-      if (!isNaN(v) && v !== 0) byIdTN[c.idTN] = v;
-    });
-    catBapMap[id] = byIdTN;
-  }
 }
 
 function fillSelect(sel, values, placeholder){
@@ -503,23 +477,17 @@ document.getElementById('btnCalc').addEventListener('click', () => {
     return;
   }
 
-  // Số buồng/búp lấy tự động từ sheet "SB Cắt bắp" theo đúng Lô + tháng đang tính (kế hoạch SXKD),
-  // không nhập tay — vì trong file gốc, chích búp/phun thuốc buồng/bao buồng đều dùng chung 1 nguồn "SoBuong" này.
-  const soBuongKeHoach = (catBapMap[selectedLo.id] && catBapMap[selectedLo.id][idTNTarget]) || 0;
-
-  const catBapInfoBox = document.getElementById('catBapInfo');
-  catBapInfoBox.classList.remove('hidden');
-  catBapInfoBox.textContent = Object.keys(catBapMap).length
-    ? `Số buồng cắt bắp kế hoạch tháng ${thang}/${nam} (lấy từ sheet "SB Cắt bắp"): ${soBuongKeHoach.toLocaleString('vi-VN')}`
-    : `Không tìm thấy sheet "SB Cắt bắp" trong file MD đã nạp — các mục Chích búp/Phun thuốc buồng/Bao buồng sẽ không tính được.`;
+  // Số búp/buồng do người dùng tự nhập cho đúng tháng đang tính (không lấy tự động từ file).
+  const soBup = Number(document.getElementById('inputSoBup').value) || 0;
+  const soBuong = Number(document.getElementById('inputSoBuong').value) || 0;
 
   const out = []; // {section, maVT, ten, unit, qty, basis, colUsed, dinhMucVal, driverLabel, driverQty}
 
   const driverLabelOf = d => ({
     cay:'Số cây HH',
     ha:'DT trồng HH (ha)',
-    bup: 'Số buồng cắt bắp (SB Cắt bắp)',
-    buong: 'Số buồng cắt bắp (SB Cắt bắp)'
+    bup: 'Số lượng chích búp (nhập tay)',
+    buong: 'Số lượng buồng (nhập tay)'
   }[d] || d);
 
   // Mục đặc biệt: Cây giống trồng mới (chỉ ở tháng tuổi = 1, xử lý riêng vì sheet "1. CÂY GIỐNG" có cấu trúc khác hẳn)
@@ -565,7 +533,8 @@ document.getElementById('btnCalc').addEventListener('click', () => {
       let driverQty = 0;
       if (item.driver === 'cay') driverQty = selectedLo.soCay;
       else if (item.driver === 'ha') driverQty = selectedLo.dt;
-      else if (item.driver === 'bup' || item.driver === 'buong') driverQty = soBuongKeHoach;
+      else if (item.driver === 'bup') driverQty = soBup;
+      else if (item.driver === 'buong') driverQty = soBuong;
       const qty = dinhMucVal * driverQty;
       if (qty > 0){
         out.push({
@@ -594,13 +563,13 @@ document.getElementById('btnPublish').addEventListener('click', async () => {
     const resp = await fetch('/api/publish', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ label, source: { datalo, catBapMap, dinhMucSections } })
+      body: JSON.stringify({ label, source: { datalo, dinhMucSections } })
     });
     const json = await resp.json();
     if (!resp.ok) throw new Error(json.error || ('Lỗi ' + resp.status));
 
     const generatedAt = new Date().toISOString();
-    const entry = { label, generatedAt, datalo, catBapMap, dinhMucSections };
+    const entry = { label, generatedAt, datalo, dinhMucSections };
     const idx = localSources.findIndex(s => s.label.trim().toLowerCase() === label.toLowerCase());
     if (idx >= 0) localSources[idx] = entry; else localSources.push(entry);
     activeSourceLabel = label;
