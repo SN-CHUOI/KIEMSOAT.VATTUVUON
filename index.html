@@ -199,7 +199,8 @@ function syncDraftSource(){
     if (oldIdx >= 0) localSources.splice(oldIdx, 1);
   }
   const idx = localSources.findIndex(s => s.label.trim().toLowerCase() === label.toLowerCase());
-  const entry = { label, generatedAt: new Date().toISOString(), datalo, dinhMucSections, saved: idx >= 0 ? !!localSources[idx].saved : false };
+  // Bản vừa nạp luôn là "chưa lưu" — kể cả khi trùng tên với 1 bản đã lưu sẵn (lưu lại sẽ hỏi ghi đè qua nút Lưu, không tự động).
+  const entry = { label, generatedAt: new Date().toISOString(), datalo, dinhMucSections, saved: false };
   if (idx >= 0) localSources[idx] = entry; else localSources.push(entry);
   currentDraftLabel = label;
   activeSourceLabel = label;
