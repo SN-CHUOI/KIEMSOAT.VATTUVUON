@@ -190,6 +190,14 @@ function renderSourcePills(){
 // Ghi lại (thêm hoặc cập nhật) bộ dữ liệu vừa nạp xong (2 file) thành 1 nguồn "chưa lưu" riêng biệt,
 // để nạp thêm bộ khác (xí nghiệp khác) không bị mất bộ trước đó — chọn qua lại bằng pill.
 let currentDraftLabel = null;
+let filenameLabelGuess = null; // tên xí nghiệp đoán từ tên file (vd: DATALO.ERC.xlsx -> "ERC")
+
+// Tên file dạng "...TÊN.XN.xlsx" (VD: DATALO.ERC.xlsx, DINHMUC.ERC.xlsx) -> lấy đoạn ngay trước ".xlsx"/".xls"
+function guessLabelFromFilename(filename){
+  const noExt = String(filename||'').replace(/\.xlsx?$/i, '');
+  const parts = noExt.split('.');
+  return parts.length > 1 ? parts[parts.length - 1].trim() : '';
+}
 function syncDraftSource(){
   if (!(datalo.length && dinhMucSections.length && freshlyUploaded)) return;
   const label = document.getElementById('publishLabel').value.trim();
@@ -212,6 +220,7 @@ function useSource(src){
   dinhMucSections = src.dinhMucSections || [];
   activeSourceLabel = src.label;
   currentDraftLabel = src.saved ? null : src.label;
+  filenameLabelGuess = null;
   document.getElementById('sourceActive').textContent =
     `Đang dùng dữ liệu: ${src.label}` + (src.saved ? '' : ' (chưa lưu lên web)') +
     (src.generatedAt ? ` — cập nhật ${new Date(src.generatedAt).toLocaleString('vi-VN')}` : '');
@@ -252,6 +261,7 @@ document.getElementById('fileMD').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
   document.getElementById('fileMD-name').textContent = file.name;
+  { const g = guessLabelFromFilename(file.name); if (g) filenameLabelGuess = g; }
   freshlyUploaded = true; activeSourceLabel = null; currentDraftLabel = null; document.getElementById('publishLabel').value = '';
   setStatus('statusMD', 'Đang đọc...', true);
   readWorkbook(file, (err, wb) => {
@@ -368,6 +378,7 @@ document.getElementById('fileDM').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
   document.getElementById('fileDM-name').textContent = file.name;
+  { const g = guessLabelFromFilename(file.name); if (g) filenameLabelGuess = g; }
   freshlyUploaded = true; activeSourceLabel = null; currentDraftLabel = null; document.getElementById('publishLabel').value = '';
   setStatus('statusDM', 'Đang đọc...', true);
   readWorkbook(file, (err, wb) => {
@@ -466,10 +477,14 @@ function tryEnable(){
     publishBox.classList.remove('hidden');
     const labelInput = document.getElementById('publishLabel');
     if (!labelInput.value){
-      const counts = {};
-      datalo.forEach(l => { counts[l.xn] = (counts[l.xn]||0) + 1; });
-      const guess = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
-      if (guess) labelInput.value = guess[0];
+      if (filenameLabelGuess){
+        labelInput.value = filenameLabelGuess;
+      } else {
+        const counts = {};
+        datalo.forEach(l => { counts[l.xn] = (counts[l.xn]||0) + 1; });
+        const guess = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+        if (guess) labelInput.value = guess[0];
+      }
     }
     syncDraftSource();
   } else {
