@@ -109,7 +109,7 @@
   <table id="resultTable">
     <thead><tr>
       <th>Công đoạn</th><th>Mã VT</th><th>Tên vật tư</th><th>Đơn vị</th>
-      <th>Cơ sở tính</th><th>Cột tra trong sheet Định mức</th>
+      <th>Cơ sở tính</th><th class="qty">Tháng tuổi</th><th class="qty">Tháng trong năm</th><th>Cột tra trong sheet Định mức</th>
       <th class="qty">Định mức/đơn vị</th><th>Tính theo</th><th class="qty">Số lượng (tính theo)</th>
       <th class="qty">Số lượng vật tư cần</th>
     </tr></thead>
@@ -447,7 +447,7 @@ document.getElementById('btnCalc').addEventListener('click', () => {
   // Mục đặc biệt: Cây giống trồng mới (chỉ ở tháng tuổi = 1, xử lý riêng vì sheet "1. CÂY GIỐNG" có cấu trúc khác hẳn)
   if (thangTuoi === 1){
     out.push({section:'Cây giống', maVT:'—', ten:'Cây giống trồng mới', unit:'cây',
-      basis:'Đặc biệt (mục 1)', colUsed:'Tháng tuổi = 1', dinhMucVal:1, driverLabel:driverLabelOf('cay'),
+      basis:'Đặc biệt (mục 1)', thangTuoi, thang, colUsed:'Tháng tuổi = 1', dinhMucVal:1, driverLabel:driverLabelOf('cay'),
       driverQty: selectedLo.soCay, qty: selectedLo.soCay});
   }
 
@@ -493,7 +493,7 @@ document.getElementById('btnCalc').addEventListener('click', () => {
         out.push({
           section: sec.title, maVT: item.maVT, ten: item.ten, unit: item.unit,
           basis: sec.basis === 'TT' ? 'Tháng tuổi' : (sec.basis === 'TN' ? 'Tháng trong năm' : 'Cố định'),
-          colUsed, dinhMucVal, driverLabel: driverLabelOf(item.driver), driverQty, qty
+          thangTuoi, thang, colUsed, dinhMucVal, driverLabel: driverLabelOf(item.driver), driverQty, qty
         });
       }
     });
@@ -512,6 +512,8 @@ document.getElementById('btnExport').addEventListener('click', () => {
     'Tên vật tư': row.ten,
     'Đơn vị': row.unit,
     'Cơ sở tính': row.basis,
+    'Tháng tuổi': row.thangTuoi,
+    'Tháng trong năm': row.thang,
     'Cột tra trong sheet Định mức': row.colUsed,
     'Định mức/đơn vị': row.dinhMucVal,
     'Tính theo': row.driverLabel,
@@ -519,7 +521,7 @@ document.getElementById('btnExport').addEventListener('click', () => {
     'Số lượng vật tư cần': row.qty
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:28},{wch:16},{wch:32},{wch:10},{wch:16},{wch:34},{wch:16},{wch:26},{wch:14},{wch:20}];
+  ws['!cols'] = [{wch:28},{wch:16},{wch:32},{wch:10},{wch:16},{wch:10},{wch:14},{wch:34},{wch:16},{wch:26},{wch:14},{wch:20}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Chi tiet kiem tra');
   XLSX.writeFile(wb, `KiemTra_DinhMuc_${r.loId}_T${r.thang}-${r.nam}.xlsx`);
@@ -540,13 +542,13 @@ function renderResult(out, thangTuoi, thang, nam){
   const tbody = document.querySelector('#resultTable tbody');
   tbody.innerHTML = '';
   if (!out.length){
-    tbody.innerHTML = '<tr><td colspan="10">Không có vật tư nào áp dụng cho tháng này.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12">Không có vật tư nào áp dụng cho tháng này.</td></tr>';
     return;
   }
   out.forEach(row => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${row.section}</td><td>${row.maVT}</td><td>${row.ten}</td><td>${row.unit}</td>
-      <td>${row.basis}</td><td>${row.colUsed}</td>
+      <td>${row.basis}</td><td class="qty">${row.thangTuoi}</td><td class="qty">${row.thang}</td><td>${row.colUsed}</td>
       <td class="qty">${formatQty(row.dinhMucVal)}</td><td>${row.driverLabel}</td>
       <td class="qty">${formatQty(row.driverQty)}</td>
       <td class="qty"><b>${formatQty(row.qty)}</b></td>`;
