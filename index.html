@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tra cứu Định mức Vật tư theo Lô/Thửa</title>
+<style>
+  :root{
+    --bg:#f4f6f3; --card:#ffffff; --border:#dbe3d8; --text:#1f2a1e; --muted:#6b7a68;
+    --accent:#2f7d3f; --accent-dark:#1f5a2c; --warn:#b4530a; --zebra:#f7faf5;
+  }
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px;}
+  h1{font-size:20px;margin:0 0 4px}
+  h2{font-size:15px;margin:0 0 10px;color:var(--accent-dark)}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:16px;max-width:960px}
+  label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+  input[type=file]{font-size:13px}
+  .file-row{display:flex;flex-wrap:wrap;gap:24px}
+  .file-row > div{flex:1;min-width:260px}
+  .file-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .file-name{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+  .status{font-size:12px;margin-top:6px}
+  .ok{color:var(--accent-dark)} .err{color:#b3261e}
+  .row{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-bottom:12px}
+  .field{min-width:160px}
+  input[type=text],input[type=number],select{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:14px}
+  #loInfo{font-size:13px;background:var(--zebra);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:10px 0;display:none}
+  #loInfo b{color:var(--accent-dark)}
+  button{background:var(--accent);color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+  button:hover{background:var(--accent-dark)}
+  button:disabled{background:#a9b7a6;cursor:not-allowed}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}
+  th,td{border:1px solid var(--border);padding:6px 8px;text-align:left}
+  th{background:#eaf2e8;color:var(--accent-dark)}
+  tr:nth-child(even){background:var(--zebra)}
+  .section-title{background:#dcecd9!important;font-weight:700;color:var(--accent-dark)}
+  .note{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.5}
+  .hidden{display:none}
+  .qty{text-align:right;font-variant-numeric:tabular-nums}
+  #datalist-count{font-size:12px;color:var(--muted)}
+  .warn-box{background:#fff4e5;border:1px solid #f0c988;color:var(--warn);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+
+<h1>🍌 Tra cứu Định mức Vật tư theo Lô/Thửa</h1>
+<div class="sub">Nhập file dữ liệu lô/thửa (MD) và file Định mức vật tư → chọn lô + tháng cần tính → ra danh sách vật tư cần dùng.</div>
+
+<div class="card">
+  <h2>Bước 1 — Cập nhật dữ liệu</h2>
+  <div class="file-row">
+    <div>
+      <label>File dữ liệu Lô/Thửa (…MD_KQ…xlsx, cần sheet "datalo")</label>
+      <div class="file-picker">
+        <input type="file" id="fileMD" accept=".xlsx,.xls">
+        <span class="file-name" id="fileMD-name"></span>
+      </div>
+      <div class="status" id="statusMD"></div>
+    </div>
+    <div>
+      <label>File Định mức vật tư (…VAT TU…xlsx, cần sheet "Định mức")</label>
+      <div class="file-picker">
+        <input type="file" id="fileDM" accept=".xlsx,.xls">
+        <span class="file-name" id="fileDM-name"></span>
+      </div>
+      <div class="status" id="statusDM"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card hidden" id="queryCard">
+  <h2>Bước 2 — Chọn lô/thửa và tháng cần tính</h2>
+  <div class="row">
+    <div class="field">
+      <label>Xí nghiệp</label>
+      <select id="selXN"><option value="">— Chọn —</option></select>
+    </div>
+    <div class="field">
+      <label>Nông trường</label>
+      <select id="selNT"><option value="">— Chọn —</option></select>
+    </div>
+    <div class="field">
+      <label>Lô / Thửa (vd: 12.2 = Lô 12, Thửa 2)</label>
+      <select id="selLoThua"><option value="">— Chọn —</option></select>
+    </div>
+    <div class="field">
+      <label>Tháng cần tính</label>
+      <select id="thang"></select>
+    </div>
+    <div class="field">
+      <label>Năm</label>
+      <input type="number" id="nam" value="2026">
+    </div>
+  </div>
+
+  <div id="loInfo"></div>
+
+  <div class="row">
+    <div class="field">
+      <label>Số lượng búp phát sinh trong tháng (chích búp)</label>
+      <input type="number" id="inputSoBup" value="0" min="0">
+    </div>
+    <div class="field">
+      <label>Số lượng buồng phát sinh trong tháng (phun thuốc/bao buồng)</label>
+      <input type="number" id="inputSoBuong" value="0" min="0">
+    </div>
+  </div>
+
+  <button id="btnCalc" disabled>Tính định mức vật tư</button>
+  <div id="warnBox"></div>
+</div>
+
+<div class="card hidden" id="resultCard">
+  <h2>Kết quả — Định mức vật tư cần dùng</h2>
+  <div id="resultMeta" class="sub"></div>
+  <button id="btnExport" style="margin-bottom:10px">⬇️ Xuất Excel kiểm tra chi tiết</button>
+  <table id="resultTable">
+    <thead><tr>
+      <th>Công đoạn</th><th>Mã VT</th><th>Tên vật tư</th><th>Đơn vị</th>
+      <th>Cơ sở tính</th><th>Cột tra trong sheet Định mức</th>
+      <th class="qty">Định mức/đơn vị</th><th>Tính theo</th><th class="qty">Số lượng đơn vị</th>
+      <th class="qty">Số lượng cần</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="note">
+    Ghi chú: (1) "Số buồng"/"Sản lượng" là số bạn tự ước tính cho tháng cần tính, không lấy từ số liệu thực tế đã phát sinh.
+    (2) Với vật tư phun/bao buồng, công cụ tạm dùng chung 1 mốc thời gian theo tháng dương lịch của buồng phát sinh (chưa tách riêng theo tuổi buồng).
+    (3) Số cây/Diện tích lấy cố định từ file dữ liệu lô đã nạp — nếu lô có biến động (trồng dặm, huỷ...) trong tháng, số liệu có thể lệch nhẹ.
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+const BASE_YEAR = 2022; // idTN=1 <=> Tháng 1/2022 (xác nhận từ sheet idTN của file MD)
+
+let datalo = [];         // danh sách lô/thửa đã parse
+let dinhMucSections = []; // danh sách mục định mức đã parse
+let selectedLo = null;
+
+function idTNOf(thang, nam){ return (nam - BASE_YEAR) * 12 + Number(thang); }
+
+function setStatus(elId, msg, ok){
+  const el = document.getElementById(elId);
+  el.textContent = msg;
+  el.className = 'status ' + (ok ? 'ok' : 'err');
+}
+
+function readWorkbook(file, cb, onlySheets){
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const data = new Uint8Array(e.target.result);
+      const opts = {type:'array', cellDates:false};
+      if (onlySheets) opts.sheets = onlySheets; // chỉ parse đúng sheet cần, tránh treo trình duyệt với file rất nặng
+      const wb = XLSX.read(data, opts);
+      cb(null, wb);
+    }catch(err){ cb(err); }
+  };
+  reader.onerror = () => cb(new Error('Không đọc được file'));
+  reader.readAsArrayBuffer(file);
+}
+
+// ---------- Bước 1a: parse sheet "datalo" ----------
+document.getElementById('fileMD').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('fileMD-name').textContent = file.name;
+  setStatus('statusMD', 'Đang đọc...', true);
+  readWorkbook(file, (err, wb) => {
+    if (err){ setStatus('statusMD', 'Lỗi đọc file: ' + err.message, false); return; }
+    parseMDWorkbook(wb);
+  }, ['datalo']);
+});
+
+function parseMDWorkbook(wb){
+    const ws = wb.Sheets['datalo'];
+    if (!ws){ setStatus('statusMD', 'Không tìm thấy sheet "datalo" trong file này.', false); return; }
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    const header = rows[0].map(h => String(h).trim());
+    const col = name => header.indexOf(name);
+    const idx = {
+      id: col('ID'), xn: col('Xí nghiệp'), nt: col('Nông trường'),
+      lo: col('Lô'), thua: col('Thửa'), ngayTrong: col('Ngày trồng'),
+      thangTrong: col('Tháng trồng'), namTrong: col('Năm trồng'),
+      idTN_NT: col('idTN_NT'), soCay: col('Số cây HH'), dt: col('DT trồng HH'),
+      matDo: col('Mật độ cây'), tinhTrang: col('Tình trạng')
+    };
+    const missing = Object.entries(idx).filter(([k,v])=>v===-1).map(([k])=>k);
+    if (missing.length){ setStatus('statusMD', 'Thiếu cột trong sheet datalo: ' + missing.join(', '), false); return; }
+
+    datalo = [];
+    for (let i=1;i<rows.length;i++){
+      const r = rows[i];
+      if (!r || r[idx.id] === '' || r[idx.id] === undefined) continue;
+      const soCay = Number(r[idx.soCay]) || 0;
+      if (soCay <= 0) continue; // bỏ lô đã huỷ / chưa có cây hiện hữu
+      datalo.push({
+        id: String(r[idx.id]),
+        xn: String(r[idx.xn]||''),
+        nt: String(r[idx.nt]||''),
+        lo: String(r[idx.lo]||''),
+        thua: String(r[idx.thua]||''),
+        ngayTrong: r[idx.ngayTrong],
+        thangTrong: Number(r[idx.thangTrong])||null,
+        namTrong: Number(r[idx.namTrong])||null,
+        idTN_NT: Number(r[idx.idTN_NT])||null,
+        soCay: soCay,
+        dt: Number(r[idx.dt]) || 0,
+        matDo: Number(r[idx.matDo]) || 0,
+        tinhTrang: String(r[idx.tinhTrang]||'')
+      });
+    }
+    setStatus('statusMD', `Đã nạp ${datalo.length} lô/thửa.`, true);
+    populateXNList();
+    tryEnable();
+}
+
+function fillSelect(sel, values, placeholder){
+  sel.innerHTML = `<option value="">${placeholder}</option>`;
+  values.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    sel.appendChild(opt);
+  });
+}
+
+function populateXNList(){
+  const xns = [...new Set(datalo.map(l => l.xn))].sort();
+  fillSelect(document.getElementById('selXN'), xns, '— Chọn Xí nghiệp —');
+  fillSelect(document.getElementById('selNT'), [], '— Chọn Nông trường —');
+  fillSelect(document.getElementById('selLoThua'), [], '— Chọn Lô/Thửa —');
+}
+
+document.getElementById('selXN').addEventListener('change', e => {
+  const xn = e.target.value;
+  const nts = [...new Set(datalo.filter(l => l.xn === xn).map(l => l.nt))].sort();
+  fillSelect(document.getElementById('selNT'), nts, '— Chọn Nông trường —');
+  fillSelect(document.getElementById('selLoThua'), [], '— Chọn Lô/Thửa —');
+  selectedLo = null; showLoInfo(); tryEnable();
+});
+
+document.getElementById('selNT').addEventListener('change', e => {
+  const xn = document.getElementById('selXN').value;
+  const nt = e.target.value;
+  const matches = datalo.filter(l => l.xn === xn && l.nt === nt)
+    .sort((a,b) => a.lo - b.lo || String(a.thua).localeCompare(String(b.thua), undefined, {numeric:true}));
+  const sel = document.getElementById('selLoThua');
+  sel.innerHTML = '<option value="">— Chọn Lô/Thửa —</option>';
+  matches.forEach(l => {
+    const opt = document.createElement('option');
+    opt.value = l.id;
+    opt.textContent = `Lô ${l.lo} - Thửa ${l.thua}`;
+    sel.appendChild(opt);
+  });
+  selectedLo = null; showLoInfo(); tryEnable();
+});
+
+document.getElementById('selLoThua').addEventListener('change', e => {
+  selectedLo = datalo.find(l => l.id === e.target.value) || null;
+  showLoInfo();
+  tryEnable();
+});
+
+function showLoInfo(){
+  const box = document.getElementById('loInfo');
+  if (!selectedLo){ box.style.display='none'; return; }
+  const l = selectedLo;
+  box.style.display = 'block';
+  box.innerHTML = `
+    <b>Lô ${l.lo} - Thửa ${l.thua}</b> — ${l.xn} / ${l.nt}<br>
+    Ngày trồng: <b>${l.thangTrong}/${l.namTrong}</b> &nbsp;|&nbsp;
+    Số cây HH: <b>${l.soCay.toLocaleString('vi-VN')}</b> cây &nbsp;|&nbsp;
+    DT trồng HH: <b>${l.dt.toLocaleString('vi-VN')}</b> ha &nbsp;|&nbsp;
+    Mật độ: <b>${l.matDo}</b> cây/ha
+  `;
+}
+
+// ---------- Bước 1b: parse sheet "Định mức" ----------
+document.getElementById('fileDM').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('fileDM-name').textContent = file.name;
+  setStatus('statusDM', 'Đang đọc...', true);
+  readWorkbook(file, (err, wb) => {
+    if (err){ setStatus('statusDM', 'Lỗi đọc file: ' + err.message, false); return; }
+    parseDMWorkbook(wb);
+  }, ['Định mức']);
+});
+
+function parseDMWorkbook(wb){
+    const ws = wb.Sheets['Định mức'];
+    if (!ws){ setStatus('statusDM', 'Không tìm thấy sheet "Định mức" trong file này.', false); return; }
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+
+    dinhMucSections = [];
+    let cur = null;
+    for (let i=0;i<rows.length;i++){
+      const r = rows[i];
+      const B = r[1] !== undefined ? String(r[1]).trim() : '';
+      const C = r[2] !== undefined ? String(r[2]).trim() : '';
+
+      if (/^\d+\.\s*/.test(B)) {
+        const yearScope = /NĂM\s*1\b/i.test(B) ? '1' : (/NĂM\s*2\+/i.test(B) ? '2+' : null);
+        let taggedBasis = null;
+        if (/\(Tháng tuổi\)/i.test(B)) taggedBasis = 'TT';
+        else if (/\(Tháng trong năm\)/i.test(B)) taggedBasis = 'TN';
+        cur = { title: B.replace(/\s*\(Tháng[^)]*\)\s*$/i,'').trim(), yearScope, taggedBasis, monthCols: [], items: [], boxWeightKg: null, basis: null };
+        dinhMucSections.push(cur);
+        continue;
+      }
+      if (!cur) continue;
+
+      if (B === 'STT') {
+        const cols = [];
+        for (let c=7; c<r.length; c++){
+          const v = r[c];
+          if (v === '' || v === undefined){ if (cols.length) break; else continue; }
+          const n = Number(v);
+          if (!isNaN(n)) cols.push({idx:c, label:n}); else break;
+        }
+        cur.monthCols = cols;
+        if (cur.taggedBasis){
+          cur.basis = cols.length <= 1 ? 'fixed' : cur.taggedBasis;
+        } else {
+          cur.basis = cols.length <= 1 ? 'fixed' : (cols.length <= 13 ? 'TN' : 'TT');
+        }
+        continue;
+      }
+
+      if (String(r[4]||'').trim() === 'TRỌNG LƯỢNG THÙNG') {
+        const v = Number(r[7]);
+        if (!isNaN(v)) cur.boxWeightKg = v;
+        continue;
+      }
+
+      if (C === 'Định mức') {
+        const maVT = String(r[3]||'').trim();
+        const ten = String(r[4]||'').trim();
+        const dvtRaw = String(r[5]||'').trim();
+        if (!maVT || !cur.monthCols.length) continue;
+        const parts = dvtRaw.split('/');
+        const unit = (parts[0]||'').trim();
+        const driverRaw = (parts[1]||'').trim().toLowerCase();
+        const values = {};
+        cur.monthCols.forEach(mc => {
+          const v = Number(r[mc.idx]);
+          values[mc.label] = isNaN(v) ? 0 : v;
+        });
+        cur.items.push({maVT, ten, unit, driver: normDriver(driverRaw), values});
+      }
+    }
+    const totalItems = dinhMucSections.reduce((s,sec)=>s+sec.items.length,0);
+    setStatus('statusDM', `Đã nạp ${dinhMucSections.length} mục định mức, ${totalItems} mã vật tư.`, true);
+    tryEnable();
+}
+
+function normDriver(d){
+  if (d.startsWith('cây') || d.startsWith('cay')) return 'cay';
+  if (d.startsWith('ha')) return 'ha';
+  if (d.startsWith('búp') || d.startsWith('bup')) return 'bup';
+  if (d.startsWith('buồng') || d.startsWith('buong')) return 'buong';
+  return d;
+}
+
+function isDongGoi(title){
+  return /ĐÓNG GÓI/i.test(title);
+}
+
+// ---------- Bước 2: kích hoạt khi đủ dữ liệu ----------
+function tryEnable(){
+  const ready = datalo.length && dinhMucSections.length;
+  document.getElementById('queryCard').classList.toggle('hidden', !ready);
+  document.getElementById('btnCalc').disabled = !(ready && selectedLo);
+}
+
+const thangSel = document.getElementById('thang');
+for (let m=1;m<=12;m++){
+  const o = document.createElement('option'); o.value=m; o.textContent = 'Tháng ' + m;
+  thangSel.appendChild(o);
+}
+thangSel.value = new Date().getMonth()+1;
+document.getElementById('nam').value = new Date().getFullYear();
+
+// ---------- Bước 3: tính toán ----------
+document.getElementById('btnCalc').addEventListener('click', () => {
+  const warnBox = document.getElementById('warnBox');
+  warnBox.innerHTML = '';
+  if (!selectedLo) return;
+
+  const thang = Number(thangSel.value);
+  const nam = Number(document.getElementById('nam').value);
+  const idTNTarget = idTNOf(thang, nam);
+  const thangTuoi = idTNTarget - selectedLo.idTN_NT + 1;
+
+  if (thangTuoi < 1){
+    warnBox.innerHTML = `<div class="warn-box">Lô này chưa trồng vào tháng ${thang}/${nam} (trồng tháng ${selectedLo.thangTrong}/${selectedLo.namTrong}).</div>`;
+    document.getElementById('resultCard').classList.add('hidden');
+    return;
+  }
+
+  const soBup = Number(document.getElementById('inputSoBup').value) || 0;
+  const soBuong = Number(document.getElementById('inputSoBuong').value) || 0;
+
+  const out = []; // {section, maVT, ten, unit, qty, basis, colUsed, dinhMucVal, driverLabel, driverQty}
+
+  const driverLabelOf = d => ({cay:'Số cây HH', ha:'DT trồng HH (ha)', bup:'Số búp nhập tay', buong:'Số buồng nhập tay'}[d] || d);
+
+  // Mục đặc biệt: Cây giống trồng mới (chỉ ở tháng tuổi = 1, xử lý riêng vì sheet "1. CÂY GIỐNG" có cấu trúc khác hẳn)
+  if (thangTuoi === 1){
+    out.push({section:'Cây giống', maVT:'—', ten:'Cây giống trồng mới', unit:'cây',
+      basis:'Đặc biệt (mục 1)', colUsed:'Tháng tuổi = 1', dinhMucVal:1, driverLabel:driverLabelOf('cay'),
+      driverQty: selectedLo.soCay, qty: selectedLo.soCay});
+  }
+
+  dinhMucSections.forEach(sec => {
+    if (sec.title.startsWith('1. CÂY GIỐNG')) return; // đã xử lý riêng ở trên
+    if (isDongGoi(sec.title)) return; // bỏ vật tư đóng gói theo yêu cầu
+    if (sec.yearScope === '1' && thangTuoi > 12) return;
+    if (sec.yearScope === '2+' && thangTuoi < 13) return;
+
+    sec.items.forEach(item => {
+      let dinhMucVal = 0;
+      let colUsed = '';
+      if (sec.basis === 'fixed'){
+        // Vật tư dùng "cây"/"ha" mà chỉ có 1 cột giá trị = sự kiện 1 lần lúc mới trồng (tháng tuổi = 1).
+        // Vật tư dùng "buồng"/"thùng" = phát sinh theo sự kiện trong tháng, không phụ thuộc tuổi cây.
+        const onceAtPlanting = (item.driver === 'cay' || item.driver === 'ha');
+        if (onceAtPlanting){
+          dinhMucVal = (thangTuoi === 1) ? (item.values[0] ?? Object.values(item.values)[0] ?? 0) : 0;
+          colUsed = thangTuoi === 1 ? 'cột "0" (lúc trồng)' : '(không áp dụng)';
+        } else {
+          dinhMucVal = item.values[0] ?? Object.values(item.values)[0] ?? 0;
+          colUsed = 'cột "0" (cố định, mọi tháng)';
+        }
+      } else if (sec.basis === 'TT'){
+        const base = item.values[thangTuoi] || 0;
+        const bonus = thangTuoi === 1 ? (item.values[0]||0) : 0;
+        dinhMucVal = base + bonus;
+        colUsed = `cột "${thangTuoi}" (Tháng tuổi)` + (bonus ? ` + cột "0" (lúc trồng, +${formatQty(bonus)})` : '');
+      } else if (sec.basis === 'TN'){
+        const base = item.values[thang] || 0;
+        const bonus = thangTuoi === 1 ? (item.values[0]||0) : 0;
+        dinhMucVal = base + bonus;
+        colUsed = `cột "${thang}" (Tháng trong năm)` + (bonus ? ` + cột "0" (lúc trồng, +${formatQty(bonus)})` : '');
+      }
+      if (!dinhMucVal) return;
+
+      let driverQty = 0;
+      if (item.driver === 'cay') driverQty = selectedLo.soCay;
+      else if (item.driver === 'ha') driverQty = selectedLo.dt;
+      else if (item.driver === 'bup') driverQty = soBup;
+      else if (item.driver === 'buong') driverQty = soBuong;
+      const qty = dinhMucVal * driverQty;
+      if (qty > 0){
+        out.push({
+          section: sec.title, maVT: item.maVT, ten: item.ten, unit: item.unit,
+          basis: sec.basis === 'TT' ? 'Tháng tuổi' : (sec.basis === 'TN' ? 'Tháng trong năm' : 'Cố định'),
+          colUsed, dinhMucVal, driverLabel: driverLabelOf(item.driver), driverQty, qty
+        });
+      }
+    });
+  });
+
+  window.__lastResult = { out, thangTuoi, thang, nam, loId: `Lo${selectedLo.lo}-Thua${selectedLo.thua}` };
+  renderResult(out, thangTuoi, thang, nam);
+});
+
+document.getElementById('btnExport').addEventListener('click', () => {
+  const r = window.__lastResult;
+  if (!r || !r.out.length){ alert('Chưa có kết quả để xuất.'); return; }
+  const rows = r.out.map(row => ({
+    'Công đoạn': row.section,
+    'Mã VT': row.maVT,
+    'Tên vật tư': row.ten,
+    'Đơn vị': row.unit,
+    'Cơ sở tính': row.basis,
+    'Cột tra trong sheet Định mức': row.colUsed,
+    'Định mức/đơn vị': row.dinhMucVal,
+    'Tính theo': row.driverLabel,
+    'Số lượng đơn vị': row.driverQty,
+    'Số lượng cần (Định mức × Số lượng đơn vị)': row.qty
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:28},{wch:16},{wch:32},{wch:10},{wch:16},{wch:34},{wch:16},{wch:26},{wch:14},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Chi tiet kiem tra');
+  XLSX.writeFile(wb, `KiemTra_DinhMuc_${r.loId}_T${r.thang}-${r.nam}.xlsx`);
+});
+
+function formatQty(qty){
+  if (qty === 0) return '0';
+  const digits = Math.abs(qty) < 1 ? 4 : (Math.abs(qty) < 100 ? 2 : 0);
+  return qty.toLocaleString('vi-VN', {maximumFractionDigits: digits});
+}
+
+function renderResult(out, thangTuoi, thang, nam){
+  const card = document.getElementById('resultCard');
+  card.classList.remove('hidden');
+  document.getElementById('resultMeta').textContent =
+    `Lô ${selectedLo.lo} - Thửa ${selectedLo.thua} (${selectedLo.xn}/${selectedLo.nt}) — Tháng ${thang}/${nam} — Tháng tuổi cây: ${thangTuoi}`;
+
+  const tbody = document.querySelector('#resultTable tbody');
+  tbody.innerHTML = '';
+  if (!out.length){
+    tbody.innerHTML = '<tr><td colspan="10">Không có vật tư nào áp dụng cho tháng này.</td></tr>';
+    return;
+  }
+  out.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row.section}</td><td>${row.maVT}</td><td>${row.ten}</td><td>${row.unit}</td>
+      <td>${row.basis}</td><td>${row.colUsed}</td>
+      <td class="qty">${formatQty(row.dinhMucVal)}</td><td>${row.driverLabel}</td>
+      <td class="qty">${formatQty(row.driverQty)}</td>
+      <td class="qty"><b>${formatQty(row.qty)}</b></td>`;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>
