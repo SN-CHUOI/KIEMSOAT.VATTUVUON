@@ -162,7 +162,9 @@ const BASE_YEAR = 2022; // idTN=1 <=> Tháng 1/2022 (xác nhận từ sheet idTN
 let datalo = [];         // danh sách lô/thửa đã parse
 let dinhMucSections = []; // danh sách mục định mức đã parse
 let selectedLo = null;
-let localSources = (typeof DASHBOARD_DATA_SOURCES !== 'undefined') ? DASHBOARD_DATA_SOURCES.slice() : [];
+// Mọi nguồn đã có trong data.js đều là nguồn ĐÃ LƯU (không thể lưu bằng cách nào khác) — đánh dấu saved:true rõ ràng ở đây,
+// vì file data.js không tự lưu cờ này (tránh hiện nhầm "(chưa lưu)" cho dữ liệu đã lưu thật khi tải lại trang).
+let localSources = (typeof DASHBOARD_DATA_SOURCES !== 'undefined') ? DASHBOARD_DATA_SOURCES.map(s => ({...s, saved: true})) : [];
 let activeSourceLabel = null;
 let freshlyUploaded = false; // true khi vừa nhập file mới (khác với bấm chọn nguồn đã lưu sẵn)
 
