@@ -41,18 +41,29 @@
   .qty{text-align:right;font-variant-numeric:tabular-nums}
   #datalist-count{font-size:11px;color:var(--muted)}
   .warn-box{background:#fff4e5;border:1px solid #f0c988;color:var(--warn);padding:6px 10px;border-radius:6px;font-size:12px;margin-top:8px}
+  .pill-row{display:flex;flex-wrap:wrap;gap:8px}
+  .pill{background:var(--zebra);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:999px;
+    font-size:12px;font-weight:600;cursor:pointer}
+  .pill:hover{background:#e2ecdf}
+  .pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 </style>
 </head>
 <body>
 
 <h1>🍌 Tra cứu Định mức Vật tư theo Lô/Thửa</h1>
-<div class="sub">Nhập file dữ liệu lô/thửa (MD) và file Định mức vật tư → chọn lô + tháng cần tính → ra danh sách vật tư cần dùng.</div>
+<div class="sub">Chọn xí nghiệp đã lưu sẵn, hoặc nhập file mới → chọn lô + tháng cần tính → ra danh sách vật tư cần dùng.</div>
+
+<div class="card hidden" id="sourceCard">
+  <h2>Xí nghiệp đã lưu sẵn (bấm để dùng ngay, không cần nhập file)</h2>
+  <div id="sourcePills" class="pill-row"></div>
+  <div class="sub" id="sourceActive" style="margin:6px 0 0"></div>
+</div>
 
 <div class="card">
-  <h2>Bước 1 — Cập nhật dữ liệu</h2>
+  <h2>Bước 1 — Nhập/cập nhật dữ liệu (khi có file mới của xí nghiệp bạn)</h2>
   <div class="file-row">
     <div>
-      <label>File dữ liệu Lô/Thửa (…MD_KQ…xlsx, cần sheet "datalo")</label>
+      <label>File dữ liệu Lô/Thửa (…MD_KQ…xlsx, cần sheet "datalo" và "SB Cắt bắp")</label>
       <div class="file-picker">
         <input type="file" id="fileMD" accept=".xlsx,.xls">
         <span class="file-name" id="fileMD-name"></span>
@@ -67,6 +78,16 @@
       </div>
       <div class="status" id="statusDM"></div>
     </div>
+  </div>
+  <div id="publishBox" class="hidden" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+    <label>Tên xí nghiệp (lưu lại dưới tên này — cập nhật sau sẽ đè lên đúng tên cũ)</label>
+    <div class="row" style="margin-bottom:0">
+      <div class="field" style="flex:1;min-width:200px">
+        <input type="text" id="publishLabel" placeholder="VD: XNC-BP1">
+      </div>
+      <button id="btnPublish">💾 Lưu dữ liệu này lên web</button>
+    </div>
+    <div class="status" id="statusPublish"></div>
   </div>
 </div>
 
@@ -122,6 +143,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="data.js"></script>
 <script>
 const BASE_YEAR = 2022; // idTN=1 <=> Tháng 1/2022 (xác nhận từ sheet idTN của file MD)
 
@@ -129,8 +151,46 @@ let datalo = [];         // danh sách lô/thửa đã parse
 let dinhMucSections = []; // danh sách mục định mức đã parse
 let selectedLo = null;
 let catBapMap = {};      // catBapMap[ID lô][idTN] = số buồng cắt bắp kế hoạch tháng đó (sheet "SB Cắt bắp")
+let localSources = (typeof DASHBOARD_DATA_SOURCES !== 'undefined') ? DASHBOARD_DATA_SOURCES.slice() : [];
+let activeSourceLabel = null;
+let freshlyUploaded = false; // true khi vừa nhập file mới (khác với bấm chọn nguồn đã lưu sẵn)
 
 function idTNOf(thang, nam){ return (nam - BASE_YEAR) * 12 + Number(thang); }
+
+// ---------- Nguồn dữ liệu đã lưu sẵn (mỗi xí nghiệp 1 bộ) ----------
+function renderSourcePills(){
+  const card = document.getElementById('sourceCard');
+  const box = document.getElementById('sourcePills');
+  if (!localSources.length){ card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  box.innerHTML = '';
+  localSources.forEach(src => {
+    const p = document.createElement('div');
+    p.className = 'pill' + (src.label === activeSourceLabel ? ' active' : '');
+    p.textContent = src.label;
+    p.title = src.generatedAt ? `Cập nhật lúc: ${new Date(src.generatedAt).toLocaleString('vi-VN')}` : '';
+    p.addEventListener('click', () => useSource(src));
+    box.appendChild(p);
+  });
+}
+
+function useSource(src){
+  datalo = src.datalo || [];
+  catBapMap = src.catBapMap || {};
+  dinhMucSections = src.dinhMucSections || [];
+  activeSourceLabel = src.label;
+  document.getElementById('sourceActive').textContent =
+    `Đang dùng dữ liệu: ${src.label}` + (src.generatedAt ? ` (cập nhật ${new Date(src.generatedAt).toLocaleString('vi-VN')})` : '');
+  setStatus('statusMD', `Đã nạp ${datalo.length} lô/thửa (từ "${src.label}").`, true);
+  setStatus('statusDM', `Đã nạp ${dinhMucSections.length} mục định mức (từ "${src.label}").`, true);
+  freshlyUploaded = false;
+  document.getElementById('publishLabel').value = '';
+  document.getElementById('publishBox').classList.add('hidden');
+  selectedLo = null;
+  populateXNList();
+  renderSourcePills();
+  tryEnable();
+}
 
 function setStatus(elId, msg, ok){
   const el = document.getElementById(elId);
@@ -158,6 +218,7 @@ document.getElementById('fileMD').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
   document.getElementById('fileMD-name').textContent = file.name;
+  freshlyUploaded = true; activeSourceLabel = null; document.getElementById('publishLabel').value = '';
   setStatus('statusMD', 'Đang đọc...', true);
   readWorkbook(file, (err, wb) => {
     if (err){ setStatus('statusMD', 'Lỗi đọc file: ' + err.message, false); return; }
@@ -307,6 +368,7 @@ document.getElementById('fileDM').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
   document.getElementById('fileDM-name').textContent = file.name;
+  freshlyUploaded = true; activeSourceLabel = null; document.getElementById('publishLabel').value = '';
   setStatus('statusDM', 'Đang đọc...', true);
   readWorkbook(file, (err, wb) => {
     if (err){ setStatus('statusDM', 'Lỗi đọc file: ' + err.message, false); return; }
@@ -398,7 +460,23 @@ function tryEnable(){
   const ready = datalo.length && dinhMucSections.length;
   document.getElementById('queryCard').classList.toggle('hidden', !ready);
   document.getElementById('btnCalc').disabled = !(ready && selectedLo);
+
+  const publishBox = document.getElementById('publishBox');
+  if (ready && freshlyUploaded){
+    publishBox.classList.remove('hidden');
+    const labelInput = document.getElementById('publishLabel');
+    if (!labelInput.value){
+      const counts = {};
+      datalo.forEach(l => { counts[l.xn] = (counts[l.xn]||0) + 1; });
+      const guess = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+      if (guess) labelInput.value = guess[0];
+    }
+  } else {
+    publishBox.classList.add('hidden');
+  }
 }
+
+renderSourcePills();
 
 const thangSel = document.getElementById('thang');
 for (let m=1;m<=12;m++){
@@ -501,6 +579,41 @@ document.getElementById('btnCalc').addEventListener('click', () => {
 
   window.__lastResult = { out, thangTuoi, thang, nam, loId: `Lo${selectedLo.lo}-Thua${selectedLo.thua}` };
   renderResult(out, thangTuoi, thang, nam);
+});
+
+// ---------- Lưu dữ liệu của xí nghiệp lên web (đè lên đúng tên cũ nếu đã có) ----------
+document.getElementById('btnPublish').addEventListener('click', async () => {
+  const label = document.getElementById('publishLabel').value.trim();
+  const statusEl = document.getElementById('statusPublish');
+  if (!label){ setStatus('statusPublish', 'Nhập tên xí nghiệp trước khi lưu.', false); return; }
+  if (!datalo.length || !dinhMucSections.length){ setStatus('statusPublish', 'Chưa nạp đủ 2 file.', false); return; }
+
+  setStatus('statusPublish', 'Đang lưu lên web...', true);
+  document.getElementById('btnPublish').disabled = true;
+  try {
+    const resp = await fetch('/api/publish', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ label, source: { datalo, catBapMap, dinhMucSections } })
+    });
+    const json = await resp.json();
+    if (!resp.ok) throw new Error(json.error || ('Lỗi ' + resp.status));
+
+    const generatedAt = new Date().toISOString();
+    const entry = { label, generatedAt, datalo, catBapMap, dinhMucSections };
+    const idx = localSources.findIndex(s => s.label.trim().toLowerCase() === label.toLowerCase());
+    if (idx >= 0) localSources[idx] = entry; else localSources.push(entry);
+    activeSourceLabel = label;
+    freshlyUploaded = false;
+
+    setStatus('statusPublish', `Đã lưu xong cho "${label}". Mọi người vào lại link sẽ thấy bản mới.`, true);
+    document.getElementById('sourceActive').textContent = `Đang dùng dữ liệu: ${label} (vừa lưu)`;
+    renderSourcePills();
+  } catch (e) {
+    setStatus('statusPublish', 'Lỗi khi lưu: ' + e.message, false);
+  } finally {
+    document.getElementById('btnPublish').disabled = false;
+  }
 });
 
 document.getElementById('btnExport').addEventListener('click', () => {
